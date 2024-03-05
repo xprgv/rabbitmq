@@ -18,7 +18,7 @@ type Connection struct {
 	logger         logger.Logger
 	reconnectDelay time.Duration
 	onConnect      func()
-	onDisconnect   func()
+	onDisconnect   func(reason *amqp.Error)
 }
 
 func DialConfig(url string, config amqp.Config, options ...Option) (*Connection, error) {
@@ -54,7 +54,7 @@ func DialConfig(url string, config amqp.Config, options ...Option) (*Connection,
 		for {
 			reason, ok := <-conn.NotifyClose(make(chan *amqp.Error))
 
-			go conn.onDisconnect()
+			go conn.onDisconnect(reason)
 
 			if !ok || conn.IsClosed() {
 				break

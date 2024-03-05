@@ -13,35 +13,49 @@ import (
 type Connection struct {
 	*amqp.Connection
 
-	closed         *atomic.Bool
+	closed *atomic.Bool
+
 	logger         logger.Logger
 	reconnectDelay time.Duration
+	onConnect      func()
+	onDisconnect   func()
 }
 
-func DialConfig(url string, config amqp.Config, log logger.Logger, reconnectDelay time.Duration) (*Connection, error) {
+func DialConfig(url string, config amqp.Config, options ...Option) (*Connection, error) {
+	opts := getDefaultOptions()
+
+	for _, opt := range options {
+		if opt != nil {
+			if err := opt(&opts); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	c, err := amqp.DialConfig(url, config)
 	if err != nil {
 		return nil, err
 	}
 
-	if log == nil {
-		log = logger.Null{}
-	}
-
-	if reconnectDelay == 0 {
-		reconnectDelay = 100 * time.Millisecond
-	}
+	opts.OnConnect()
 
 	conn := &Connection{
-		Connection:     c,
-		closed:         &atomic.Bool{},
-		logger:         log,
-		reconnectDelay: reconnectDelay,
+		Connection: c,
+
+		closed: &atomic.Bool{},
+
+		logger:         opts.Logger,
+		reconnectDelay: opts.ReconnectDelay,
+		onConnect:      opts.OnConnect,
+		onDisconnect:   opts.OnDisconnect,
 	}
 
 	go func() {
 		for {
 			reason, ok := <-conn.NotifyClose(make(chan *amqp.Error))
+
+			conn.onDisconnect()
+
 			if !ok || conn.IsClosed() {
 				break
 			}
@@ -58,6 +72,7 @@ func DialConfig(url string, config amqp.Config, log logger.Logger, reconnectDela
 				}
 
 				conn.Connection = c
+				conn.onConnect()
 
 				conn.logger.Info("Successfully reconnected to rabbitmq")
 				break

@@ -37,7 +37,7 @@ func DialConfig(url string, config amqp.Config, options ...Option) (*Connection,
 		return nil, err
 	}
 
-	opts.OnConnect()
+	go opts.OnConnect()
 
 	conn := &Connection{
 		Connection: c,
@@ -54,7 +54,7 @@ func DialConfig(url string, config amqp.Config, options ...Option) (*Connection,
 		for {
 			reason, ok := <-conn.NotifyClose(make(chan *amqp.Error))
 
-			conn.onDisconnect()
+			go conn.onDisconnect()
 
 			if !ok || conn.IsClosed() {
 				break
@@ -72,7 +72,7 @@ func DialConfig(url string, config amqp.Config, options ...Option) (*Connection,
 				}
 
 				conn.Connection = c
-				conn.onConnect()
+				go conn.onConnect()
 
 				conn.logger.Info("Successfully reconnected to rabbitmq")
 				break
